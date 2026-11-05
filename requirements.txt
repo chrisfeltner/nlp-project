@@ -2,3 +2,14 @@ pyconll
 numpy
 pandas
 python-dotenv
+jupyter 
+seaborn
+matplotlib
+torch
+scipy
+scikit-learn
+tokenizers
+datasets
+tqdm
+baycomp
+tabulate

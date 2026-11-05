@@ -1,3 +1,7 @@
 .idea
 .env
+.venv
 Dataset
+results/
+__pycache__/
+.ipynb_checkpoints/
