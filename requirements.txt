@@ -2,3 +2,6 @@ pyconll
 numpy
 pandas
 python-dotenv
+torch
+transformers
+sentence-transformers
