@@ -2,7 +2,7 @@ pyconll
 numpy
 pandas
 python-dotenv
-jupyter 
+jupyter
 seaborn
 matplotlib
 torch
@@ -13,3 +13,5 @@ datasets
 tqdm
 baycomp
 tabulate
+transformers
+sentence-transformers
