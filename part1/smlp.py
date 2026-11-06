@@ -105,7 +105,7 @@ def sparse_collate(batch):
     return X_batch, y_batch
 
 
-def train_one_epoch(model, dataloader, optimizer, criterion, device="cpu"):
+def train_one_epoch(model, dataloader, optimizer, criterion, device="mps"):
     """Run one training epoch: forward, loss, backward, optimizer step.
 
     Inputs: model, train dataloader, optimizer, loss function, device.
@@ -144,7 +144,7 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device="cpu"):
         "accuracy": total_correct / total_examples, # average accuracy
     }
 
-def evaluate(model, dataloader, criterion, device="cpu"):
+def evaluate(model, dataloader, criterion, device="mps"):
     """Evaluate the model without updating weights.
 
     Inputs: model, eval dataloader, loss function, device.
@@ -187,7 +187,7 @@ def evaluate(model, dataloader, criterion, device="cpu"):
 
 def train_neural_network_model(training_set, validation_set, num_classes, encoder, save_to,   
                                 hidden_dim=128, dropout=0.1, batch_size=64, learning_rate=1e-3, 
-                                weight_decay=1e-4, num_epochs=20, device=torch.device("cpu")):
+                                weight_decay=1e-4, num_epochs=20, device=torch.device("mps")):
     """Encode texts, train SparseMLP, and checkpoint the best validation model.
 
     Inputs: train/val (text, label) pairs, num_classes, encoder (text -> sparse vector), path prefix to save weights,
@@ -287,7 +287,7 @@ def train_neural_network_model(training_set, validation_set, num_classes, encode
     return metrics, best_epoch, predictions
 
 
-def load(path, device="cpu"):
+def load(path, device="mps"):
     """
     Reconstruct the model architecture (using {path}.json) and load trained weights (using {path}.pt) and return it.
     """
