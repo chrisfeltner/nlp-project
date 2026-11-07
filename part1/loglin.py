@@ -40,7 +40,7 @@ def fit(training_set, encoder: 'Encoder', save_to=None, max_iter=100):
     # Train the logistic model
     # saga is the sparse matrix friendly solver, lbfgs converges much faster on dense features
     solver = "lbfgs" if getattr(encoder, 'dense', False) else "saga"
-    logistic_model = LogisticRegression(solver=solver, max_iter=max_iter, n_jobs=n_jobs)
+    logistic_model = LogisticRegression(solver=solver, max_iter=max_iter)
     logistic_model.fit(X_train, training_labels)
 
     if save_to is not None:        
