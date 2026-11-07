@@ -1,7 +1,18 @@
 from scipy.sparse import csr_matrix
 from sklearn.linear_model import LogisticRegression
+import numpy as np
 import pickle
 from tqdm.auto import tqdm
+
+def to_matrix(vectors, encoder: 'Encoder'):
+    """
+    Stack encoded vectors into a feature matrix.
+    Dense encoders (encoder.dense = True, e.g. sentence embeddings) give a numpy array,
+    otherwise we build a sparse matrix (good for token indicators / bag of words).
+    """
+    if getattr(encoder, 'dense', False):
+        return np.stack(vectors).astype(np.float32)
+    return csr_matrix(vectors)
 
 def load(path):
     """
@@ -11,7 +22,7 @@ def load(path):
         logistic_model = pickle.load(f)
     return logistic_model
 
-def fit(training_set, encoder: 'Encoder', save_to=None, max_iter=100, n_jobs=-1):
+def fit(training_set, encoder: 'Encoder', save_to=None, max_iter=100):
     """
     Constructs, trains and returns a softmax regressor.
     
@@ -23,12 +34,14 @@ def fit(training_set, encoder: 'Encoder', save_to=None, max_iter=100, n_jobs=-1)
     training_vectors = [encoder(text) for text, label in training_set]
     training_labels = [label for text, label in training_set]
 
-    #To train the model more efficiently, we transform the training vectors to a sparse matrix
-    X_train_sparse = csr_matrix(training_vectors)
+    # Sparse matrix for sparse encoders, plain numpy array for dense ones
+    X_train = to_matrix(training_vectors, encoder)
 
     # Train the logistic model
-    logistic_model = LogisticRegression(solver="saga", max_iter=max_iter, n_jobs=n_jobs) #sparse matrix frinedly solver 
-    logistic_model.fit(X_train_sparse, training_labels)
+    # saga is the sparse matrix friendly solver, lbfgs converges much faster on dense features
+    solver = "lbfgs" if getattr(encoder, 'dense', False) else "saga"
+    logistic_model = LogisticRegression(solver=solver, max_iter=max_iter, n_jobs=n_jobs)
+    logistic_model.fit(X_train, training_labels)
 
     if save_to is not None:        
         with open(f"{save_to}.pickle", 'wb') as f:
@@ -46,8 +59,8 @@ def predict(texts, model, encoder: 'Encoder'):
     encoder: the Encoder used for in the model's training
     """
     validation_vectors = [encoder(text) for text in texts]
-    X_val_sparse = csr_matrix(validation_vectors)
-    predictions = model.predict(X_val_sparse)
+    X_val = to_matrix(validation_vectors, encoder)
+    predictions = model.predict(X_val)
     return predictions
 
 def predict_probs(texts, model, encoder: 'Encoder'):
@@ -60,6 +73,6 @@ def predict_probs(texts, model, encoder: 'Encoder'):
     encoder: the Encoder used for in the model's training
     """
     validation_vectors = [encoder(text) for text in texts]
-    X_val_sparse = csr_matrix(validation_vectors)
-    probs = model.predict_proba(X_val_sparse)
+    X_val = to_matrix(validation_vectors, encoder)
+    probs = model.predict_proba(X_val)
     return probs
