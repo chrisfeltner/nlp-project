@@ -1,4 +1,4 @@
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, issparse, vstack
 from sklearn.linear_model import LogisticRegression
 import numpy as np
 import pickle
@@ -9,9 +9,12 @@ def to_matrix(vectors, encoder: 'Encoder'):
     Stack encoded vectors into a feature matrix.
     Dense encoders (encoder.dense = True, e.g. sentence embeddings) give a numpy array,
     otherwise we build a sparse matrix (good for token indicators / bag of words).
+    Encoders that already return sparse rows are stacked directly, without a dense copy.
     """
     if getattr(encoder, 'dense', False):
         return np.stack(vectors).astype(np.float32)
+    if issparse(vectors[0]):
+        return vstack(vectors, format='csr')
     return csr_matrix(vectors)
 
 def load(path):
