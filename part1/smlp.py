@@ -48,9 +48,12 @@ class SparseMLP(nn.Module):
         nn.init.xavier_uniform_(self.weight) # why xavier?
 
     def forward(self, x):
-        """Map a sparse batch [batch, input_dim] to class log-probabilities [batch, num_classes]."""
-        # First matmul keeps x sparse; result is dense from here on.
-        x = torch.sparse.mm(x, self.weight)
+        """Map a sparse or dense batch [batch, input_dim] to class log-probabilities [batch, num_classes]."""
+        # First matmul keeps x sparse if it is sparse; result is dense from here on.
+        if x.is_sparse:
+            x = torch.sparse.mm(x, self.weight)
+        else:
+            x = x @ self.weight
         x = x + self.bias
 
         x = self.activation(x)
@@ -103,6 +106,27 @@ def sparse_collate(batch):
     y_batch = torch.stack(y_rows)
 
     return X_batch, y_batch
+
+
+def make_dataloader(vectors, labels, encoder, batch_size, shuffle):
+    """Build a DataLoader for encoded documents.
+
+    Dense encoders (encoder.dense = True, e.g. sentence embeddings) use a plain TensorDataset,
+    so batches are dense tensors and no sparse conversion happens per batch.
+    Other encoders keep the sparse path (SparseDataset + sparse_collate).
+    """
+    if getattr(encoder, 'dense', False):
+        X = torch.tensor(np.stack(vectors), dtype=torch.float32)
+        y = torch.tensor(labels, dtype=torch.long)
+        return DataLoader(TensorDataset(X, y), batch_size=batch_size, shuffle=shuffle)
+
+    # Keep SciPy sparse here; conversion to torch happens in sparse_collate
+    return DataLoader(
+        SparseDataset(csr_matrix(vectors), labels),
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=sparse_collate,
+    )
 
 
 def train_one_epoch(model, dataloader, optimizer, criterion, device="mps"):
@@ -209,27 +233,9 @@ def train_neural_network_model(training_set, validation_set, num_classes, encode
     time_document_to_vector = time.time()
     print(f"Document transformation done! Time taken: {time_document_to_vector - time_start:.3f} seconds")
     
-    # Keep SciPy sparse here; conversion to torch happens in sparse_collate
-    X_train_sparse = csr_matrix(training_vectors)
-    X_val_sparse = csr_matrix(validation_vectors)
-
-    train_dataset = SparseDataset(X_train_sparse, training_labels) # create the training dataset
-    val_dataset = SparseDataset(X_val_sparse, validation_labels) # create the validation dataset
-
-    # create the data loaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
-        collate_fn=sparse_collate,
-    )
-
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        collate_fn=sparse_collate,
-    )
+    # create the data loaders (dense or sparse, depending on the encoder)
+    train_loader = make_dataloader(training_vectors, training_labels, encoder, batch_size, shuffle=True)
+    val_loader = make_dataloader(validation_vectors, validation_labels, encoder, batch_size, shuffle=False)
 
     time_dataloader = time.time()
     print(f"Dataloader done! Time taken: {time_dataloader - time_document_to_vector:.3f} seconds")
@@ -322,14 +328,7 @@ def predict_probs(texts, model, encoder, batch_size=10):
     vectors = [encoder(x) for x in texts]
     labels = [0 for _ in texts]
 
-    x_sparse = csr_matrix(vectors)
-
-    dl = DataLoader(
-        SparseDataset(x_sparse, labels),
-        batch_size=batch_size,
-        shuffle=False,
-        collate_fn=sparse_collate,
-    )
+    dl = make_dataloader(vectors, labels, encoder, batch_size, shuffle=False)
     
     model.eval()  # disable dropout / training behaviour
     
