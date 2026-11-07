@@ -114,6 +114,7 @@ def make_dataloader(vectors, labels, encoder, batch_size, shuffle):
     Dense encoders (encoder.dense = True, e.g. sentence embeddings) use a plain TensorDataset,
     so batches are dense tensors and no sparse conversion happens per batch.
     Other encoders keep the sparse path (SparseDataset + sparse_collate).
+    Encoders that already return sparse rows are stacked directly, without a dense copy.
     """
     if getattr(encoder, 'dense', False):
         X = torch.tensor(np.stack(vectors), dtype=torch.float32)
@@ -121,8 +122,12 @@ def make_dataloader(vectors, labels, encoder, batch_size, shuffle):
         return DataLoader(TensorDataset(X, y), batch_size=batch_size, shuffle=shuffle)
 
     # Keep SciPy sparse here; conversion to torch happens in sparse_collate
+    if scipy.sparse.issparse(vectors[0]):
+        X = scipy.sparse.vstack(vectors, format="csr")
+    else:
+        X = csr_matrix(vectors)
     return DataLoader(
-        SparseDataset(csr_matrix(vectors), labels),
+        SparseDataset(X, labels),
         batch_size=batch_size,
         shuffle=shuffle,
         collate_fn=sparse_collate,
