@@ -25,13 +25,14 @@ def load(path):
         logistic_model = pickle.load(f)
     return logistic_model
 
-def fit(training_set, encoder: 'Encoder', save_to=None, max_iter=100):
+def fit(training_set, encoder: 'Encoder', save_to=None, max_iter=100, solver=None):
     """
     Constructs, trains and returns a softmax regressor.
     
     training_set: list of text-label pairs (a text is a string, a label is a 0-based integer)
     encoder: an instance of the Encoder class (such as TokenIndicator)    
     save_to: (str) if given, save the model to {save_to}.pickle
+    solver: sklearn solver; by default lbfgs for dense encoders and saga for sparse ones
     """
     # Convert the training and validation sets to vectors
     training_vectors = [encoder(text) for text, label in training_set]
@@ -42,7 +43,8 @@ def fit(training_set, encoder: 'Encoder', save_to=None, max_iter=100):
 
     # Train the logistic model
     # saga is the sparse matrix friendly solver, lbfgs converges much faster on dense features
-    solver = "lbfgs" if getattr(encoder, 'dense', False) else "saga"
+    if solver is None:
+        solver = "lbfgs" if getattr(encoder, 'dense', False) else "saga"
     logistic_model = LogisticRegression(solver=solver, max_iter=max_iter)
     logistic_model.fit(X_train, training_labels)
 
