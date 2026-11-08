@@ -2,7 +2,11 @@
 .env
 .venv
 Dataset
-results/
+# keep only the score CSVs from results/ (model weights stay local)
+results/*
+!results/*/
+results/*/*
+!results/*/*_scores.csv
 __pycache__/
 .ipynb_checkpoints/
 merged_embeddings_sampled.pkl
