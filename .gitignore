@@ -10,3 +10,4 @@ results/*/*
 __pycache__/
 .ipynb_checkpoints/
 merged_embeddings_sampled.pkl
+*.pkl

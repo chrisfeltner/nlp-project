@@ -1,0 +1,6 @@
+Model,CV macro F1,Test accuracy,Test macro F1
+1D CNN (one-hot tokens),0.642 ± 0.007,0.649,0.642
+1D CNN (learned embeddings),0.643 ± 0.005,0.653,0.644
+MLP + token indicator (best),0.668 ± 0.004,0.701,0.665
+Log-lin + token indicator,0.647 ± 0.001,0.689,0.644
+Majority-class baseline,0.383,0.621,0.383
