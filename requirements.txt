@@ -15,3 +15,5 @@ baycomp
 tabulate
 transformers
 sentence-transformers
+accelerate
+gensim
