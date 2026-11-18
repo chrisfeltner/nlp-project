@@ -1,0 +1,47 @@
+#!/bin/bash
+# Optuna search + re-evaluation of the top trials, with N_WORKERS processes sharing the one GPU.
+# Set N_WORKERS and the times from the probe job. Cost: up to --time hours x 128 credits.
+#SBATCH --job-name=lstm-search
+#SBATCH --partition=gpu_a100
+#SBATCH --gpus=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=18
+#SBATCH --mem=100G
+#SBATCH --time=02:30:00
+#SBATCH --output=slurm/logs/%x-%j.out
+#SBATCH --mail-type=END,FAIL
+##SBATCH --mail-user=YOUR_EMAIL   # remove one '#' and fill in to get e-mails
+
+set -o pipefail   # no -u: module scripts may use unset variables
+source "$HOME/nlp-project/slurm/env.sh"
+source activate "$ENV_PATH"
+export HF_HUB_OFFLINE=1
+
+STUDY="${STUDY:-lstm_s1}"
+N_WORKERS="${N_WORKERS:-4}"
+N_TRIALS="${N_TRIALS:-60}"
+# stop starting new trials after this many seconds, leaving time for running trials + re-evaluation
+SEARCH_SECONDS="${SEARCH_SECONDS:-5400}"   # 1h30m of a 2h30m job (probe: ~1 trial/min with 4 workers)
+LOGS="$PROJECT_DIR/slurm/logs/$STUDY-$SLURM_JOB_ID"
+mkdir -p "$LOGS"
+
+# restarting this job (e.g. after it hit the time limit) continues the same study
+RESUME=()
+if [ -f "$PROJECT_DIR/results/optuna/$STUDY/journal.log" ]; then
+    RESUME=(--resume-interrupted)   # safe: no other worker of this study is running at job start
+fi
+
+for w in $(seq 0 $((N_WORKERS - 1))); do
+    # only worker 0 handles interrupted trials, so they are queued again once
+    EXTRA=(); [ "$w" -eq 0 ] && EXTRA=("${RESUME[@]}")
+    python lstm_search.py --study-name "$STUDY" --n-trials "$N_TRIALS" --timeout "$SEARCH_SECONDS" \
+        --n-workers "$N_WORKERS" --worker-id "$w" "${EXTRA[@]}" \
+        --device cuda --eval-batch-size 512 --wandb \
+        > "$LOGS/worker-$w.log" 2>&1 &
+    sleep 20   # let worker 0 create the study and queue interrupted trials first
+done
+wait
+
+echo "== workers finished"; tail -n 3 "$LOGS"/worker-*.log
+echo "== re-evaluation summary"; cat "results/optuna/$STUDY/reeval_summary.csv" 2>/dev/null || echo "missing (see worker-0.log)"
+cat "results/optuna/$STUDY/best_config.json" 2>/dev/null

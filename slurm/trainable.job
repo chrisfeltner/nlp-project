@@ -1,0 +1,52 @@
+#!/bin/bash
+# Frozen vs trainable embeddings: the search winner (rank 0 of STUDY) again with --trainable, on exactly the
+# re-evaluation setup (25% of training rows, seed 0, folds 1-3), so it pairs fold by fold with the frozen
+# results in results/<STUDY>_reeval_trial<N>/. The 3 folds run in parallel.
+# Cost: ~20-30 min expected, limit 45 min (jobs under 1 h start sooner) = at most 96 SBU.
+#SBATCH --job-name=lstm-trainable
+#SBATCH --partition=gpu_a100
+#SBATCH --gpus=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=18
+#SBATCH --mem=100G
+#SBATCH --time=00:45:00
+#SBATCH --output=slurm/logs/%x-%j.out
+#SBATCH --mail-type=END,FAIL
+##SBATCH --mail-user=YOUR_EMAIL   # remove one '#' and fill in to get e-mails
+
+set -o pipefail   # no -u: module scripts may use unset variables
+source "$HOME/nlp-project/slurm/env.sh"
+source activate "$ENV_PATH"
+export HF_HUB_OFFLINE=1
+
+STUDY="${STUDY:-lstm_s1}"
+LOGS="$PROJECT_DIR/slurm/logs/trainable-$STUDY-$SLURM_JOB_ID"
+mkdir -p "$LOGS"
+
+# the winner's settings (and its frozen re-evaluation folder name), as final.job uses them
+args=$(python lstm_search.py --study-name "$STUDY" --phase final-args --final-rank 0) || exit 1
+trial=$(grep -oE 'trial[0-9]+' <<< "$args" | head -1)
+NAME="${STUDY}_${trial}_trainable_frac0.25"
+eval "set -- $args"
+echo "winner: $args"
+
+PIDS=()
+for fold in 1 2 3; do
+    python lstm_experiment.py "$@" --name "$NAME" --trainable --frac 0.25 --seeds 0 --only-folds "$fold" \
+        --device cuda --eval-batch-size 512 --wandb > "$LOGS/fold$fold.log" 2>&1 &
+    PIDS+=($!)
+done
+wait "${PIDS[@]}"
+
+echo "== frozen vs trainable, same folds (25% of training rows, seed 0)"
+python - "results/${STUDY}_reeval_${trial}" "results/$NAME" <<'EOF'
+import sys, pandas as pd
+frozen, trainable = (pd.read_csv(f"{d}/cv_scores.csv").set_index("fold").sort_index() for d in sys.argv[1:3])
+both = frozen[["accuracy", "f1", "best_epoch"]].merge(trainable[["accuracy", "f1", "best_epoch", "minutes"]],
+                                                      left_index=True, right_index=True, suffixes=("_frozen", "_trainable"))
+print(both.round(4).to_string())
+for m in ("accuracy", "f1"):
+    d = both[f"{m}_trainable"] - both[f"{m}_frozen"]
+    print(f"{m}: frozen {both[f'{m}_frozen'].mean():.4f}, trainable {both[f'{m}_trainable'].mean():.4f}, "
+          f"difference {d.mean():+.4f} (per fold: {', '.join(f'{x:+.4f}' for x in d)})")
+EOF

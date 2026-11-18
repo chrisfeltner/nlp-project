@@ -15,3 +15,7 @@ baycomp
 tabulate
 transformers
 sentence-transformers
+accelerate
+gensim
+wandb
+optuna

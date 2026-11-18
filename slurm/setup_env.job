@@ -1,0 +1,50 @@
+#!/bin/bash
+# One-time setup, as a job (login nodes have no GPU and kill anything over 15 min):
+#     sbatch slurm/setup_env.job        (from ~/nlp-project; ~30 min on gpu_mig = ≤32 SBU)
+# Builds the conda environment from conda_environment.yaml, checks that PyTorch sees CUDA,
+# and downloads HuBERT, so the training jobs spend no GPU time on installs or downloads.
+#SBATCH --job-name=lstm-setup
+#SBATCH --partition=gpu_mig
+#SBATCH --gpus=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=9
+#SBATCH --time=00:30:00
+#SBATCH --output=slurm/logs/%x-%j.out
+#SBATCH --mail-type=END,FAIL
+##SBATCH --mail-user=YOUR_EMAIL   # remove one '#' and fill in to get e-mails
+
+set -eo pipefail   # no -u: module scripts may use unset variables
+source "$HOME/nlp-project/slurm/env.sh"
+
+# needed the first time only (from the course slides)
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+# create the environment, or bring an existing one up to date with the yaml
+if [ ! -d "$ENV_PATH" ]; then
+    conda env create -p "$ENV_PATH" -f conda_environment.yaml
+else
+    conda env update -p "$ENV_PATH" -f conda_environment.yaml --prune
+fi
+source activate "$ENV_PATH"
+
+echo "== CUDA build check (version.cuda None = CPU-only build: do not continue)"
+python -c "
+import torch
+print('torch', torch.__version__)
+print('cuda available:', torch.cuda.is_available())
+print('built for cuda:', torch.version.cuda)
+print('cudnn:', torch.backends.cudnn.version())"
+
+echo "== caching HuBERT"
+python - <<'EOF'
+from transformers import AutoModel, AutoTokenizer
+name = "SZTAKI-HLT/hubert-base-cc"
+AutoTokenizer.from_pretrained(name)
+AutoModel.from_pretrained(name)
+print("HuBERT cached in", __import__("os").environ["HF_HOME"])
+EOF
+
+python -c "import optuna, wandb, transformers, pandas; print('optuna', optuna.__version__, '| wandb', wandb.__version__, '| pandas', pandas.__version__)"
+test -f Pickles/merged_sampled_no_embeddings.pkl && echo "dataset found" || echo "WARNING: Pickles/merged_sampled_no_embeddings.pkl is missing"
+echo "setup done"
