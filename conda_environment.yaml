@@ -1,0 +1,24 @@
+# Environment for the LSTM experiments on the cluster (lstm_experiment.py, lstm_search.py).
+# Only what those scripts need; the notebooks use the full requirements.txt.
+# Versions match the laptop's .venv, so results and saved files (pickles, checkpoints) behave the same.
+# pandas especially: the dataset pickle was written with pandas 3.1.1.
+#
+#   conda env create -p ~/envs/nlp-project -f conda_environment.yaml     (slurm/setup_env.job does this)
+name: nlp-project
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13          # pyproject.toml requires >=3.13
+  - pip
+  - pip:
+      - torch==2.15.0      # the Linux wheel from PyPI includes CUDA, for the A100
+      - transformers==5.22.1
+      - tokenizers==0.23.3
+      - safetensors==0.8.0
+      - huggingface-hub==2.4.0
+      - numpy==2.5.4
+      - pandas==3.1.1
+      - scikit-learn==1.9.1
+      - optuna==5.1.0
+      - wandb==0.31.0
+      - tqdm==4.70.1

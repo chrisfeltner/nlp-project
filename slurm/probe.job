@@ -1,0 +1,51 @@
+#!/bin/bash
+# Short test job (~20 min, ~43 credits): checks the GPU and environment and times training, so the
+# number of parallel workers and the time limits of search.job / final.job can be set from real numbers.
+#SBATCH --job-name=lstm-probe
+#SBATCH --partition=gpu_a100
+#SBATCH --gpus=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=18
+#SBATCH --mem=100G
+#SBATCH --time=00:20:00
+#SBATCH --output=slurm/logs/%x-%j.out
+#SBATCH --mail-type=END,FAIL
+##SBATCH --mail-user=YOUR_EMAIL   # remove one '#' and fill in to get e-mails
+
+set -o pipefail   # no -u: module scripts may use unset variables
+source "$HOME/nlp-project/slurm/env.sh"
+source activate "$ENV_PATH"
+export HF_HUB_OFFLINE=1
+
+PROBE="$PROJECT_DIR/results/probe-$SLURM_JOB_ID"
+COMMON=(--frac 0.25 --seeds 0 --only-folds 0 --epochs 1 --patience 99 --device cuda --no-save-models
+        --eval-batch-size 512 --results-dir "$PROBE")
+
+echo "== GPU"; nvidia-smi
+python -c "import torch; print('cuda available:', torch.cuda.is_available(), '|', torch.cuda.get_device_name(0))"
+
+echo "== one process, 1 epoch on 25% of the training rows, batch 64 / 256 / 512"
+for bs in 64 256 512; do
+    python lstm_experiment.py --name "single_bs$bs" --batch-size "$bs" "${COMMON[@]}" 2>&1 | grep -E "epoch 00|Error"
+done
+
+echo "== 4 processes at once, batch 128 (how well parallel workers share the GPU)"
+PIDS=()
+for i in 1 2 3 4; do
+    python lstm_experiment.py --name "parallel_$i" --batch-size 128 "${COMMON[@]}" > "$PROBE-parallel_$i.log" 2>&1 &
+    PIDS+=($!)
+done
+nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv -l 20 > "$PROBE-gpu_usage.csv" &
+SMI=$!
+wait "${PIDS[@]}"
+kill "$SMI" 2>/dev/null
+grep -h "epoch 00" "$PROBE"-parallel_*.log
+
+echo "== summary (seconds per epoch, incl. validation)"
+python - "$PROBE" <<'EOF'
+import sys, pandas as pd
+from pathlib import Path
+for h in sorted(Path(sys.argv[1]).glob("*/seed-0/fold-0/history.csv")):
+    print(f"{h.parts[-4]:14} {pd.read_csv(h).seconds.iloc[0]:6.0f} s")
+EOF
+echo "GPU usage while 4 ran in parallel:"; cat "$PROBE-gpu_usage.csv"
