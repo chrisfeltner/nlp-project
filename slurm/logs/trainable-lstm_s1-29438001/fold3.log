@@ -1,0 +1,26 @@
+experiment lstm_s1_trial43_trainable_frac0.25 on cuda
+data: 113708 train rows, 50537 test rows, labels ['Left', 'Right'] (7s)
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 2534.71it/s]
+[transformers] [1mBertModel LOAD REPORT[0m from: SZTAKI-HLT/hubert-base-cc
+Key                                        | Status     |  | 
+-------------------------------------------+------------+--+-
+cls.predictions.bias                       | UNEXPECTED |  | 
+cls.seq_relationship.bias                  | UNEXPECTED |  | 
+cls.predictions.transform.LayerNorm.bias   | UNEXPECTED |  | 
+cls.predictions.transform.LayerNorm.weight | UNEXPECTED |  | 
+cls.predictions.transform.dense.weight     | UNEXPECTED |  | 
+cls.seq_relationship.weight                | UNEXPECTED |  | 
+cls.predictions.transform.dense.bias       | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+tokenized (5s), mean length 33.6 pieces
+seed 0 fold 3: 90967 train / 22741 val
+  epoch 00 | train loss 0.6057 acc 0.6681 | val loss 0.5760 acc 0.6953 f1 0.6711 | 41s
+  epoch 01 | train loss 0.5252 acc 0.7377 | val loss 0.6011 acc 0.6891 f1 0.6569 | 40s
+  epoch 02 | train loss 0.4639 acc 0.7795 | val loss 0.6205 acc 0.6808 f1 0.6629 | 40s
+  epoch 03 | train loss 0.4079 acc 0.8135 | val loss 0.6410 acc 0.6751 f1 0.6596 | 40s
+  early stop: no val-loss improvement for 3 epochs
+seed 0 fold 3: val acc 0.6953 f1 0.6711 (best epoch 0, 2.8 min)
+
+lstm_s1_trial43_trainable_frac0.25: 3 runs, val accuracy 0.6901 ± 0.0045, macro F1 0.6474 ± 0.0232
