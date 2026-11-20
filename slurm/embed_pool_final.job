@@ -1,0 +1,61 @@
+#!/bin/bash
+# Final runs: the FINAL_TOP best embed-and-pool configurations, on all training rows, 3 seeds x 5 folds,
+# scored on the test set too. The 15 x FINAL_TOP runs are spread over N_PROCS processes on the one GPU.
+# Cost: up to --time hours x 128 credits.
+#SBATCH --job-name=embed-pool-final
+#SBATCH --partition=gpu_a100
+#SBATCH --gpus=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=18
+#SBATCH --mem=100G
+#SBATCH --time=02:00:00
+#SBATCH --output=slurm/logs/%x-%j.out
+#SBATCH --mail-type=END,FAIL
+##SBATCH --mail-user=YOUR_EMAIL   # remove one '#' and fill in to get e-mails
+
+set -o pipefail   # no -u: module scripts may use unset variables
+source "$HOME/nlp-project/slurm/env.sh"
+source activate "$ENV_PATH"
+export HF_HUB_OFFLINE=1
+
+STUDY="${STUDY:-embed_pool_s1}"
+FINAL_TOP="${FINAL_TOP:-1}"   # 1 = only the best configuration; 3 = the top 3 (3x the time)
+N_PROCS="${N_PROCS:-5}"
+LOGS="$PROJECT_DIR/slurm/logs/final-$STUDY-$SLURM_JOB_ID"
+mkdir -p "$LOGS"
+
+# one line per run: "<rank> <seed> <fold>"; finished runs are skipped, so resubmitting continues
+RUNS=()
+for rank in $(seq 0 $((FINAL_TOP - 1))); do
+    for seed in 0 1 2; do for fold in 0 1 2 3 4; do RUNS+=("$rank $seed $fold"); done; done
+done
+
+run_one() {
+    read -r rank seed fold <<< "$1"
+    args=$(python embed_and_pool_search.py --study-name "$STUDY" --phase final-args --final-rank "$rank") || exit 1
+    eval "set -- $args"
+    python embed_and_pool.py "$@" --frac 1.0 --eval-test --seeds "$seed" --only-folds "$fold" \
+        --device cuda --eval-batch-size 512 --wandb --wandb-project nlp-project-embed-pool \
+        > "$LOGS/rank$rank-seed$seed-fold$fold.log" 2>&1
+    echo "rank $rank seed $seed fold $fold: exit $?"
+}
+export -f run_one
+export STUDY LOGS
+
+printf '%s\n' "${RUNS[@]}" | xargs -P "$N_PROCS" -I{} bash -c 'run_one "{}"'
+
+echo "== results"
+for rank in $(seq 0 $((FINAL_TOP - 1))); do
+    name=$(python embed_and_pool_search.py --study-name "$STUDY" --phase final-args --final-rank "$rank" | grep -oE 'final_[^ ]+')
+    python - "results/$name" <<'EOF'
+import sys, pandas as pd
+from pathlib import Path
+d = Path(sys.argv[1])
+for kind in ("cv", "test"):
+    f = d / f"{kind}_scores.csv"
+    if f.exists():
+        s = pd.read_csv(f)
+        print(f"{d.name} {kind}: {len(s)} runs, accuracy {s.accuracy.mean():.4f} ± {s.accuracy.std():.4f}, "
+              f"macro F1 {s.f1.mean():.4f} ± {s.f1.std():.4f}")
+EOF
+done
