@@ -1,0 +1,15 @@
+{
+  "trial": 19,
+  "params": {
+    "pooling": "sum",
+    "depth": 2,
+    "width": 256,
+    "dropout": 0.0859705599102207,
+    "lr": 0.0005781584560109141,
+    "weight_decay": 1.630803838770043e-05,
+    "batch_size": 512
+  },
+  "metric": "f1",
+  "reeval_f1_mean": 0.6455989968331585,
+  "final_command": "python embed_and_pool.py --pooling sum --head-sizes 256 256 --dropout 0.0859705599102207 --lr 0.0005781584560109141 --weight-decay 1.630803838770043e-05 --batch-size 512 --name final_embed_pool_s1_trial19 --frac 1.0 --eval-test"
+}
