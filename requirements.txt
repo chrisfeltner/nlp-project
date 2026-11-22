@@ -19,3 +19,6 @@ accelerate
 gensim
 wandb
 optuna
+jax
+numpyro
+arviz
