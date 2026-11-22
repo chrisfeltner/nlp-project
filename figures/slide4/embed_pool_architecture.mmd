@@ -1,0 +1,5 @@
+flowchart TB
+    A[WordPiece IDs] --> B[Frozen HuBERT<br/>768-D vectors]
+    B --> C[Sum pooling]
+    C --> D[MLP<br/>2 x 256, Tanh]
+    D --> E[Left / Right]
